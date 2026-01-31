@@ -13,13 +13,13 @@ fn main() {
     };
 
     match cli.command {
-        todo_cli::cli::Command::Add { text } => {
-            if let Err(err) = todos.add(text) {
+        todo_cli::cli::Command::Add { text, priority, tags } => {
+            if let Err(err) = todos.add(text, priority, tags) {
                 eprintln!("Error adding todo: {}", err);
             }
         }
-        todo_cli::cli::Command::List => {
-            todos.print();
+        todo_cli::cli::Command::List { priority, tag } => {
+            todos.print(priority, tag.as_deref());
         }
         todo_cli::cli::Command::Done { id } => {
             if let Err(err) = todos.mark_done(id) {
@@ -28,6 +28,11 @@ fn main() {
         }
         todo_cli::cli::Command::Remove { id } => {
             if let Err(err) = todos.remove(id) {
+                eprintln!("Error: {}", err);
+            }
+        }
+        todo_cli::cli::Command::Toggle { id } => {
+            if let Err(err) = todos.toggle(id) {
                 eprintln!("Error: {}", err);
             }
         }
