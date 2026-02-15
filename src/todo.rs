@@ -3,6 +3,8 @@ use serde::{Serialize, Deserialize};
 use std::str::FromStr;
 use clap::ValueEnum;
 use std::fmt;
+use chrono::{DateTime, NaiveDateTime, Local, TimeZone};
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Todo {
@@ -11,6 +13,7 @@ pub struct Todo {
     pub done: bool,
     pub priority: Option<Priority>,
     pub tags: Vec<String>,
+    pub due_date: Option<DateTime<Local>>,
 }
 
 pub struct TodoList {
@@ -53,6 +56,7 @@ pub enum TodoError {
     Io(std::io::Error),
     NotFound(usize),
     Json(serde_json::Error),
+    InvalidDateTime,
 }
 
 impl std::fmt::Display for TodoError {
@@ -61,6 +65,7 @@ impl std::fmt::Display for TodoError {
             TodoError::Io(e) => write!(f, "IO error: {}", e),
             TodoError::Json(e) => write!(f, "Json error: {}", e),
             TodoError::NotFound(id) => write!(f, "Todo with id {} not found", id),
+            TodoError::InvalidDateTime => write!(f, "Invalid DateTime"),
         }
     }
 }
@@ -77,23 +82,48 @@ impl TodoList {
         storage::save(&self.todos).map_err(TodoError::Io)
     }
 
-    pub fn add(&mut self, text: String, priority: Option<Priority>, tags: Vec<String>) -> Result<(), TodoError> {
+    pub fn add(&mut self, text: String, 
+               priority: Option<Priority>, 
+               tags: Vec<String>, 
+               due: Option<NaiveDateTime>) -> Result<(), TodoError> {
         let id = self.todos.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let due_date: Option<DateTime<Local>> = match due {
+            Some(naive) => {
+                let local_dt = Local
+                    .from_local_datetime(&naive)
+                    .single()
+                    .ok_or(TodoError::InvalidDateTime)?;
+
+                Some(local_dt)
+            }
+            None => None,
+        };
         self.todos.push(Todo {
             id, 
             text, 
             done: false,
             priority,
             tags,
+            due_date: due_date,
         });
         self.save()
     }
 
-    pub fn print(&self, filter_priority: Option<Priority>, filter_tag: Option<&str>) {
+    pub fn print(&self, filter_priority: Option<Priority>, 
+                 filter_tag: Option<&str>, 
+                 filter_due: Option<NaiveDateTime>) {
         let todos = self.todos.iter().filter(|todo| {
             let priority_match = filter_priority.as_ref().map_or(true, |p| todo.priority.as_ref() == Some(p));
             let tag_match = filter_tag.map_or(true, |t| todo.tags.contains(&t.to_string()));
-            priority_match && tag_match
+            let filter_due_with_timezone: Option<DateTime<Local>> = filter_due.map(|naive| {
+                Local.from_local_datetime(&naive)
+                    .single()
+                    .unwrap_or_else(|| Local::now()) // fallback for ambiguous/invalid times
+            });
+            let due_match = filter_due_with_timezone.map_or(true, |date| {
+                todo.due_date.map_or(false, |d| d <= date)
+            });
+            priority_match && tag_match && due_match
         });
 
         if todos.clone().count() == 0 {
@@ -104,7 +134,10 @@ impl TodoList {
             let status = if todo.done { "✔" } else { " " };
             let tags = if todo.tags.is_empty() {"".into()} else {format!(" [{}]", todo.tags.join(",")) };
             let priority = todo.priority.as_ref().map(|p| p.to_string()).unwrap_or_default();
-            println!("[{}] {}: {} {} {}", status, todo.id, todo.text, priority, tags);
+            let due = todo.due_date
+                .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_default();
+            println!("[{}] {}: {} {} {} {}", status, todo.id, todo.text, priority, tags, due);
         }
     }
 
