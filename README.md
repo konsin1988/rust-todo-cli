@@ -18,8 +18,9 @@ This is a pet project built for learning Rust fundamentals, including:
 *  Remove a todo by ID
 *  Mark a todo as done
 *  Custom error handling
-*  Todo priarity
+*  Todo priority
 *  Todo tags and search
+*  Todo due date field 
 
 ---
 
@@ -100,7 +101,5 @@ src/
 
 ## Future Improvements
 
-* [ ] Add due dates
-* [ ] Add priority levels
 * [ ] Improve terminal formatting
 
